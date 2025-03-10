@@ -167,8 +167,8 @@ class RealReceding(STWAController):
         self.ocp_solver.cost_set(self.N, "zl", self.params.ws_t * np.ones((1,)))
         # Receding constraint --> bound the receding state
         if self.r < self.N:
-            self.ocp_solver.constraints_set(self.r, "lbx", self.x_viable)
-            self.ocp_solver.constraints_set(self.r, "ubx", self.x_viable)
+            self.ocp_solver.constraints_set(self.r, "lbx", self.x_viable - np.ones(self.model.nx) * 1e-2)
+            self.ocp_solver.constraints_set(self.r, "ubx", self.x_viable + np.ones(self.model.nx) * 1e-2)
         for i in range(self.N):
             if i != self.r:
                 # No constraints on other running states
