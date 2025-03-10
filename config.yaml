@@ -7,7 +7,7 @@ dt: 5e-3                  # time step
 alpha: 10.                # safety margin 
 
 solver_mode: 'BALANCE'    # HPIPM mode, can be --> 'BALANCE', 'ROBUST', 'SPEED', 'SPEED_ABS'
-nlp_max_iter: 500
+nlp_max_iter: 800
 rti_iter: 100
 qp_max_iter: 200
 alpha_reduction: 0.3
