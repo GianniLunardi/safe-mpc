@@ -26,10 +26,10 @@ model_name = args['system']
 params = Parameters(model_name, rti=True)
 model = AdamModel(params, n_dofs=4)
 scores = pickle.load(open(f'{params.DATA_DIR}{model_name}_45hor_10sm_scores.pkl', 'rb'))
-cont_names = ['naive', 'zerovel', 'st', 'terminal', 'htwa', 'receding']
-colors = ['tomato', 'mediumblue', 'limegreen', 'darkorange', 'darkgreen', 'purple']
-markers = ['o', 'x', '*', 's', '^', '>']
-labels = ['Naive', 'Zerovel', 'ST', 'Terminal', 'HTWA', 'Receding']
+cont_names = ['naive', 'zerovel', 'st', 'htwa', 'receding', 'real']
+colors = ['tomato', 'mediumblue', 'limegreen', 'darkgreen', 'purple', 'darkorange']
+markers = ['o', 'x', '^', 'v', 'p', 'h']
+labels = ['Naive', 'Zerovel', 'ST', 'HTWA', 'Receding', 'EqRec']
 
 fig, ax = plt.subplots(figsize=(10, 7))
 for i, c in enumerate(cont_names):
@@ -73,7 +73,7 @@ plt.savefig(f'{params.DATA_DIR}horizons_vs_failed.pdf', bbox_inches='tight')
 plt.close()
 
 
-alphas = [10., 20., 30., 40., 50.]
+alphas = [10., 20., 30., 40.]#, 50.]
 cont_names, colors, markers, labels = cont_names[2:], colors[2:], markers[2:], labels[2:]
 scores_ma = {}
 for c in cont_names:

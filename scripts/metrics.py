@@ -54,7 +54,7 @@ if COMPUTE_OPT_TRAJ:
 else:
     costs_list = np.load(f'{params.DATA_DIR}{model_name}_opt_costs.npy')  
 
-cont_names = ['naive', 'zerovel', 'st', 'terminal', 'htwa', 'receding']
+cont_names = ['naive', 'zerovel', 'st', 'htwa', 'receding', 'real']
 cont_names = cont_names[2:]           # This for the multiple alpha case
 X_traj, U_traj, task_not_coll, task_failed = {}, {}, {}, {}
 for c in cont_names:
