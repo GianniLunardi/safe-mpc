@@ -6,6 +6,7 @@
 *.zip
 *.json
 *.txt
+*.mp4
 generated/*
 nn_models/*
 data/*

@@ -188,6 +188,7 @@ for field, t in zip(controller.time_fields, np.quantile(times, 0.99, axis=0)):
     
 # Save simulation data
 with open(f'{params.DATA_DIR}{model_name}_{cont_name}_{horizon}hor_{int(params.alpha)}sm_mpc.pkl', 'wb') as f:
+# with open(f'../video_paper/z1_receding_setpoint.pkl', 'wb') as f:
     pickle.dump({'x': np.asarray(x_sim_list),
                  'u': np.asarray(u_list),
                  'conv_idx' : conv_idx,
