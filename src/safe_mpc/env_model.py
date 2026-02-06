@@ -6,7 +6,7 @@ import adam
 from adam.casadi import KinDynComputations
 import casadi as cs
 from casadi import MX, vertcat, Function
-from acados_template import AcadosModel
+from acados_template import AcadosModel, AcadosSim, AcadosSimSolver
 import scipy.linalg as lin
 import torch.nn as nn
 import l4casadi as l4c
@@ -329,3 +329,94 @@ class AdamModel:
 
     def reset_seed(self,seed):
         self.rng = np.random.default_rng(seed=seed) 
+
+
+class QuadrotorModel(AdamModel):
+    def __init__(self, params):
+        self.params = params
+        self.amodel = AcadosModel()
+
+        # State --> 7 pose (3 + 4), 6 velocity, control --> 4 propellers
+        self.x = MX.sym("x", 13)
+        self.x_dot = MX.sym("x_dot", 12)
+        self.u = MX.sym("u", 4)
+
+        # Dynamics
+        qx, qy, qz, qw = self.x[3:7]        # quaternions
+        wx, wy, wz = self.x[10:]            # angular vel
+
+        Rot = vertcat(
+                cs.horzcat(1-2*(qy**2+qz**2), 2*(qx*qy-qw*qz),   2*(qx*qz+qw*qy)),
+                cs.horzcat(2*(qx*qy+qw*qz),   1-2*(qx**2+qz**2), 2*(qy*qz-qw*qx)),
+                cs.horzcat(2*(qx*qz-qw*qy),   2*(qy*qz+qw*qx),   1-2*(qx**2+qy**2))
+        )
+
+        Omega = vertcat(
+            cs.horzcat(0,   -wx, -wy, -wz),
+            cs.horzcat(wx,   0,   wz, -wy),
+            cs.horzcat(wy,  -wz,  0,   wx),
+            cs.horzcat(wz,   wy, -wx,  0)
+        )
+
+        self.mass = params.mass
+        self.gravity = cs.vertcat(0, 0, -9.81)
+        J = cs.diag(cs.vertcat(params.Jx, params.Jy, params.Jz))
+
+        self.f_expl = vertcat(
+            self.x[7:10],
+            self.gravity + (1 / self.mass) * Rot @ cs.vertcat(0, 0, self.u[0]),
+            0.5 * Omega @ self.x[3:7],
+            cs.inv(J) @ (self.u[1:] - cs.cross(self.x[10:], J @ self.x[10:]))
+        ) 
+        self.f_fun = Function('f', [self.x, self.u], [self.f_expl])
+
+        self.amodel.x = self.x
+        self.amodel.x = self.x
+        self.amodel.f_expl_expr = self.f_expl
+
+        self.nx = self.amodel.x.size()[0]
+        self.nu = self.amodel.u.size()[0]
+        self.ny = self.nx + self.nu
+        self.nq = 7
+        self.nv = 6
+
+        #TODO: Noise dynamics and inverse dyn
+
+        # Limits, define those parameters
+        self.x_min = np.array(params.lower_limits)
+        self.x_max = np.array(params.upper_limits)
+
+        self.u_min = -np.array(params.thrust_limits)
+        self.u_max =  np.array(params.thrust_limits)
+
+        # TODO: Cartesian obstacles
+
+        # Integrator
+        sim = AcadosSim()
+        sim.model = self.amodel
+        sim.solver_options.T = params.dt
+        sim.solver_options.num_stages = 4       # ERK 4 
+        self.acados_integrator = AcadosSimSolver(sim)
+
+    def checkStateConstraints(self, x):
+        return np.all(np.logical_and(x >= self.x_min - self.params.tol_x, 
+                                     x <= self.x_max + self.params.tol_x))
+    def checkTorqueConstraints(self, x, u):
+        return np.all(np.logical_and(u >= self.u_min - self.params.tol_u, 
+                                     u <= self.u_max + self.params.tol_u))
+    
+    def checkTorqueBounds(self, tau):
+        raise NotImplementedError
+    
+    def integrate(self, x, u):
+        self.acados_integrator.set('x', x)
+        self.acados_integrator.set('u', u)
+        self.acados_integrator.solve()
+        return self.acados_integrator.get('x'), u
+    
+    def integrate_controller_model(self, x, u):
+        x_next, _ = self.integrate(x, u)
+        return x_next
+    
+    def integrate_naively(self, x, u):
+        return self.integrate(x, u)
