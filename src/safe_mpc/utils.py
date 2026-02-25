@@ -209,3 +209,32 @@ def casadi_if_else(logic_var,expression,bounds):
                           expression, 
                           (bounds[0] + bounds[1])/2, True))
 
+def quat_to_rot(q):
+    w, x, y, z = q
+
+    R = np.array([
+        [1 - 2*(y*y + z*z),     2*(x*y - z*w),     2*(x*z + y*w)],
+        [2*(x*y + z*w),     1 - 2*(x*x + z*z),     2*(y*z - x*w)],
+        [2*(x*z - y*w),         2*(y*z + x*w), 1 - 2*(x*x + y*y)]
+    ])
+    return R
+
+def quat_to_rpy(q):
+    w, x, y, z = q
+
+    # Roll (x-axis rotation)
+    sinr_cosp = 2 * (w*x + y*z)
+    cosr_cosp = 1 - 2 * (x*x + y*y)
+    roll = np.arctan2(sinr_cosp, cosr_cosp)
+
+    # Pitch (y-axis rotation)
+    sinp = 2 * (w*y - z*x)
+    sinp = np.clip(sinp, -1.0, 1.0)  # evita errori numerici
+    pitch = np.arcsin(sinp)
+
+    # Yaw (z-axis rotation)
+    siny_cosp = 2 * (w*z + x*y)
+    cosy_cosp = 1 - 2 * (y*y + z*z)
+    yaw = np.arctan2(siny_cosp, cosy_cosp)
+
+    return np.array([roll, pitch, yaw])

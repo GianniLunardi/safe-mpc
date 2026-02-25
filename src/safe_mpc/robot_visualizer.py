@@ -9,6 +9,8 @@ from .ocp import *
 from urdf_parser_py.urdf import URDF
 from .parser import Parameters, parse_args
 import xml.etree.ElementTree as ET
+from .utils import quat_to_rot
+from robot_descriptions.loaders.pinocchio import load_robot_description
 
 class RobotVisualizer:
     def __init__(self, params, n_dofs=4):
@@ -175,3 +177,28 @@ class RobotVisualizer:
 
     def moveCamera(self, cam_pos):
         self.viz.setCameraPosition(cam_pos)
+
+class DroneVisualizer(RobotVisualizer):
+    def __init__(self, params):
+        self.params = params
+        drone = load_robot_description("cf2_description")
+        
+        self.viz = pin.visualize.MeshcatVisualizer(drone.model, drone.collision_model, drone.visual_model)
+        self.viz.initViewer(loadModel=True, open=True)
+
+        # Set the end-effector target
+        ee_radius = params.ee_radius   
+        sphere = meshcat.geometry.Sphere(ee_radius)
+        self.viz.viewer['world/robot/target'].set_object(sphere)
+        self.viz.viewer['world/robot/target'].set_property('color', [0, 1, 0, 0.4])
+        self.viz.viewer['world/robot/target'].set_property('visible', False)
+        T_target = np.eye(4)
+        self.viz.viewer['world/robot/target'].set_transform(T_target)
+
+    def display(self, x):
+        pose = np.eye(4)
+        pos, quat = x[:3], x[3:7]
+        pose[:3, 3] = pos
+        pose[:3, :3] = quat_to_rot(quat)
+        self.viz.viewer['pinocchio/visuals/base_link_0'].set_transform(pose)
+        time.sleep(self.params.dt)
