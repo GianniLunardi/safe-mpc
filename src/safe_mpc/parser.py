@@ -125,6 +125,7 @@ class Parameters:
         self.ee_ref = np.array(parameters['ee_ref'])
         self.ee_pos = np.array(parameters['ee_position'])
 
+        self.integrator_type = parameters['integrator_type']
         self.solver_type = 'SQP_RTI' if rti else 'SQP'
         self.solver_mode = parameters['solver_mode']
         self.nlp_max_iter = int(parameters['rti_iter']) if rti else int(parameters['nlp_max_iter'])
