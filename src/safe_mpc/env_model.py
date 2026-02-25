@@ -115,6 +115,12 @@ class AdamModel:
         self.x_min = np.hstack([joint_lower, - joint_velocity])
         self.x_max = np.hstack([joint_upper, joint_velocity])
 
+        self.u_min = -1e6 * np.ones(self.nu)
+        self.u_max = 1e6 *np.ones(self.nu)
+
+        # Bounds on control --> 0 since acceleration is not limited
+        self.num_bound_u = 0
+
         self.bounds_diff = np.abs(self.x_max-self.x_min)
 
         self.x_min -= self.bounds_diff*(self.params.q_margin/100)
@@ -431,6 +437,8 @@ class QuadrotorModel(AdamModel):
 
         self.u_min = np.zeros(self.nu)
         self.u_max = np.array(params.thrust_limits)
+
+        self.num_bound_u = 1
 
         # EE ref (position of the drone itself)
         self.t_glob = self.x[:3]

@@ -54,6 +54,12 @@ class AbstractController:
         self.ocp.constraints.ubx_e = self.model.x_max - (self.model.params.q_margin/100) * self.model.bounds_diff
         self.ocp.constraints.idxbx_e = np.arange(self.model.nx)
 
+        # Control bounds
+        if self.model.num_bound_u > 0:
+            self.ocp.constraints.lbu = self.model.u_min
+            self.ocp.constraints.ubu = self.model.u_max
+            self.ocp.constraints.idxbu = np.arange(self.model.nu)
+
         # Nonlinear constraints
         
         self.nl_con_0, self.nl_con, self.nl_con_e = self.model.NL_external
@@ -94,11 +100,9 @@ class AbstractController:
             self.ocp.cost.zl_e,self.ocp.cost.zu_e,self.ocp.cost.Zl_e,self.ocp.cost.Zu_e = self.zl_e,self.zu_e,self.Zl_e,self.Zu_e 
 
         # Solver options
-        self.ocp.solver_options.integrator_type = "DISCRETE"
-        #self.ocp.solver_options.hessian_approx = "EXACT"   
+        self.ocp.solver_options.integrator_type = self.model.params.integrator_type
         self.ocp.solver_options.nlp_solver_type = self.model.params.solver_type
         self.ocp.solver_options.hpipm_mode = self.model.params.solver_mode
-        # self.ocp.solver_options.qp_solver = 'FULL_CONDENSING_HPIPM'
         self.ocp.solver_options.nlp_solver_max_iter = self.model.params.nlp_max_iter
         self.ocp.solver_options.qp_solver_iter_max = self.model.params.qp_max_iter
         self.ocp.solver_options.globalization = self.model.params.globalization
@@ -150,10 +154,12 @@ class AbstractController:
             
         self.ocp_solver.set(self.N, 'x', self.x_guess[-1])
 
-        for i in range(self.N+1):
-            self.ocp_solver.set(i,'p',np.hstack([self.cost.traj[:,self.current_step+i],
-                                                [self.model.params.alpha,
-                                                 self.ocp_solver.get(i,'p')[-1]]]))
+        self.cost.set_cost_ref(self)
+        #### THIS REMOVE
+        # for i in range(self.N+1):
+        #     self.ocp_solver.set(i,'p',np.hstack([self.cost.traj[:,self.current_step+i],
+        #                                         [self.model.params.alpha,
+        #                                          self.ocp_solver.get(i,'p')[-1]]]))
         # Solve the OCP
         status = self.ocp_solver.solve()
 

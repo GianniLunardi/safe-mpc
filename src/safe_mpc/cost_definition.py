@@ -12,12 +12,13 @@ class AbstractCost():
         model.params.track_traj = False
 
     def set_ocp_cost_type(self,controller):
-        #controller.ocp.cost.cost_type_0 = self.cost_type
         controller.ocp.cost.cost_type = self.cost_type
         controller.ocp.cost.cost_type_e = self.cost_type
-        # controller.ocp.solver_options.hessian_approx = "EXACT"
     
     def set_cost_expr(self,controller):
+        pass
+
+    def set_cost_ref(self, controller):
         pass
 
     def set_solver_cost(self,controller):
@@ -65,6 +66,13 @@ class ReachTargetLS(AbstractCost):
         self.Q = np.diag(Q)
         self.R = np.diag(R)
         self.Qn = np.diag(Qn)
+        # This is only for 3D position target
+        self.y_ref = np.zeros(model.ny)
+        self.y_ref[:3] = model.params.ee_ref
+        self.y_ref[3] = 1.0
+        self.y_ref_e = np.zeros(model.nx)
+        self.y_ref_e[:3] = model.params.ee_ref
+        self.y_ref_e[3] = 1.0
 
     def set_cost_expr(self, controller):
         controller.ocp.cost.W = lin.block_diag(self.Q, self.R)
@@ -79,6 +87,11 @@ class ReachTargetLS(AbstractCost):
 
         controller.ocp.cost.Vu = np.zeros((self.model.ny, self.model.nu))
         controller.ocp.cost.Vu[-self.model.nu:, :] = np.eye(self.model.nu)
+
+    def set_cost_ref(self, controller):
+        for i in range(controller.N):
+            controller.ocp_solver.set(i, 'yref', self.y_ref)
+        controller.ocp_solver.set(controller.N, 'yref', self.y_ref_e)
 
 class ReachTargetNLS(AbstractCost):
     def __init__(self,model,Q,R):
@@ -102,6 +115,12 @@ class ReachTargetNLS(AbstractCost):
         controller.ocp.cost.W_e = lin.block_diag(self.Q*np.eye(controller.model.t_glob.shape[0]))
         controller.ocp.cost.yref_e = np.zeros((controller.model.t_glob.shape[0],))
 
+    def set_cost_ref(self, controller):
+        for i in range(controller.N + 1):
+            controller.ocp_solver.set(i, 'p', np.hstack([self.traj[:,controller.current_step+i],
+                                                        [controller.model.params.alpha,
+                                                        controller.ocp_solver.get(i,'p')[-1]]]))
+            
 class ReachTargetEXT(AbstractCost):
     def __init__(self, model,Q,R):
         super().__init__(model)
@@ -120,6 +139,12 @@ class ReachTargetEXT(AbstractCost):
     def set_ocp_cost_type(self, controller):
         super().set_ocp_cost_type(controller)
         controller.ocp.solver_options.hessian_approx = "EXACT"
+
+    def set_cost_ref(self, controller):
+        for i in range(controller.N + 1):
+            controller.ocp_solver.set(i, 'p', np.hstack([self.traj[:,controller.current_step+i],
+                                                        [controller.model.params.alpha,
+                                                        controller.ocp_solver.get(i,'p')[-1]]]))
 
 class AbstractTracking8():
     def __init__(self,model):
