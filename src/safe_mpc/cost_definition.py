@@ -15,7 +15,7 @@ class AbstractCost():
         #controller.ocp.cost.cost_type_0 = self.cost_type
         controller.ocp.cost.cost_type = self.cost_type
         controller.ocp.cost.cost_type_e = self.cost_type
-        controller.ocp.solver_options.hessian_approx = "EXACT"
+        # controller.ocp.solver_options.hessian_approx = "EXACT"
     
     def set_cost_expr(self,controller):
         pass
@@ -57,6 +57,28 @@ class ZeroCost(AbstractCost):
         # controller.ocp.cost.yref = np.zeros(self.model.ny)
         # controller.ocp.cost.yref_e = np.zeros(self.model.nx)
 
+class ReachTargetLS(AbstractCost):
+    def __init__(self, model, Q, R, Qn):
+        super().__init__(model)
+        # LQR on drone positions (first 3 states) and control reg
+        self.cost_type = 'LINEAR_LS'
+        self.Q = np.diag(Q)
+        self.R = np.diag(R)
+        self.Qn = np.diag(Qn)
+
+    def set_cost_expr(self, controller):
+        controller.ocp.cost.W = lin.block_diag(self.Q, self.R)
+        controller.ocp.cost.W_e = self.Qn
+
+        controller.ocp.cost.yref = np.zeros(self.model.ny)
+        controller.ocp.cost.yref_e = np.zeros(self.model.nx)
+        controller.ocp.cost.Vx = np.zeros((self.model.ny, self.model.nx))
+        controller.ocp.cost.Vx[:self.model.nx, :self.model.nx] = np.eye(self.model.nx)
+
+        controller.ocp.cost.Vx_e = np.eye(self.model.nx)
+
+        controller.ocp.cost.Vu = np.zeros((self.model.ny, self.model.nu))
+        controller.ocp.cost.Vu[-self.model.nu:, :] = np.eye(self.model.nu)
 
 class ReachTargetNLS(AbstractCost):
     def __init__(self,model,Q,R):
