@@ -335,43 +335,85 @@ class QuadrotorModel(AdamModel):
     def __init__(self, params):
         self.params = params
         self.amodel = AcadosModel()
+        self.amodel.name = 'quadrotor'
 
-        # State --> 7 pose (3 + 4), 6 velocity, control --> 4 propellers
-        self.x = MX.sym("x", 13)
-        self.x_dot = MX.sym("x_dot", 12)
-        self.u = MX.sym("u", 4)
+        # Positions 
+        x = MX.sym('x')
+        y = MX.sym('y')
+        z = MX.sym('z')
 
-        # Dynamics
-        qx, qy, qz, qw = self.x[3:7]        # quaternions
-        wx, wy, wz = self.x[10:]            # angular vel
+        # # Quarternion heading (body frame )
+        q1 = MX.sym('q1')
+        q2 = MX.sym('q2')
+        q3 = MX.sym('q3')
+        q4 = MX.sym('q4')
 
-        Rot = vertcat(
-                cs.horzcat(1-2*(qy**2+qz**2), 2*(qx*qy-qw*qz),   2*(qx*qz+qw*qy)),
-                cs.horzcat(2*(qx*qy+qw*qz),   1-2*(qx**2+qz**2), 2*(qy*qz-qw*qx)),
-                cs.horzcat(2*(qx*qz-qw*qy),   2*(qy*qz+qw*qx),   1-2*(qx**2+qy**2))
+        # Transaltional velocities (inertial frame, m/s)
+        vx = MX.sym('vx')
+        vy = MX.sym('vy')
+        vz = MX.sym('vz')
+        v_c = vertcat(vx, vy, vz)
+
+        # Angular velocities w.r.t phi(roll), theta(pitch), psi(yaw)
+        # (body frame, m/s)
+        wr = MX.sym('wr')
+        wp = MX.sym('wp')
+        wy = MX.sym('wy')
+        omg = vertcat(wr, wp, wy)
+
+        # Control variable angles (Motor RPM)
+        ohm1 = MX.sym('ohm1')
+        ohm2 = MX.sym('ohm2')
+        ohm3 = MX.sym('ohm3')
+        ohm4 = MX.sym('ohm4')
+
+        self.x = vertcat(x, y, z, q1, q2, q3, q4, wr, wp, wy, vx, vy, vz)
+        self.u = vertcat( ohm1, ohm2, ohm3, ohm4)
+
+        mq = params.mass
+        l = params.arm_length
+        Ct = params.Ct
+        Cd = params.Cd
+        g0 = 9.81
+        J = params.J
+
+        D = (Cd / mq) *vertcat(vx*2, vy*2, vz**2)
+        F = Ct * vertcat(0, 0, ohm1**2  + ohm2**2  + ohm3**2  + ohm4**2 )
+        G = vertcat(0, 0, g0)
+        J = params.J
+        M = vertcat(Ct * l * (ohm1**2 + ohm2**2 - ohm3**2 - ohm4**2),
+                      Ct * l * (ohm1**2 - ohm2**2 - ohm3**2 + ohm4**2),
+                      Cd * (ohm1**2 - ohm2**2 + ohm3**2 - ohm4**2))
+
+        Rq = vertcat(
+            cs.horzcat( 2 * (q1**2 + q2**2) - 1,    -2 * (q1*q4 - q2*q3),       2 * (q1*q3 + q2*q4)),
+            cs.horzcat( 2 * (q1*q4 + q2*q3),         2 * (q1**2 + q3**2) - 1,   2 * (q1*q2 - q3*q4)),
+            cs.horzcat( 2 * (q1*q3 - q2*q4),         2 * (q1*q2 + q3*q4),       2 * (q1**2 + q4**2) - 1)
         )
 
-        Omega = vertcat(
-            cs.horzcat(0,   -wx, -wy, -wz),
-            cs.horzcat(wx,   0,   wz, -wy),
-            cs.horzcat(wy,  -wz,  0,   wx),
-            cs.horzcat(wz,   wy, -wx,  0)
+        # Orientation ODEs ( qauternion)
+        q1Dot = (-(q2 * wr) - (q3 * wp) - (q4 * wy))/2
+        q2Dot = ( (q1 * wr) - (q4 * wp) + (q3 * wy))/2
+        q3Dot = ( (q4 * wr) + (q1 * wp) - (q2 * wy))/2
+        q4Dot = (-(q3 * wr) + (q2 * wp) + (q1 * wy))/2
+
+        # Cartesian velocity ODEs ( including drag)
+        vDot_c = -G + (1/ mq) * Rq @ F - D
+
+        # Angular velocity ODEs (rate of change of projected Euler angles)
+        omgDot = cs.inv(J) @ (M - cs.cross(omg, J @ omg))
+
+        
+        self.f_expl = vertcat(vx, vy, vz, 
+            q1Dot, q2Dot, q3Dot, q4Dot,
+            omgDot[0], omgDot[1], omgDot[2],
+            vDot_c[0], vDot_c[1] , vDot_c[2]
         )
 
-        self.mass = params.mass
-        self.gravity = cs.vertcat(0, 0, -9.81)
-        J = cs.diag(cs.vertcat(params.Jx, params.Jy, params.Jz))
-
-        self.f_expl = vertcat(
-            self.x[7:10],
-            self.gravity + (1 / self.mass) * Rot @ cs.vertcat(0, 0, self.u[0]),
-            0.5 * Omega @ self.x[3:7],
-            cs.inv(J) @ (self.u[1:] - cs.cross(self.x[10:], J @ self.x[10:]))
-        ) 
         self.f_fun = Function('f', [self.x, self.u], [self.f_expl])
 
         self.amodel.x = self.x
-        self.amodel.x = self.x
+        self.amodel.u = self.u
         self.amodel.f_expl_expr = self.f_expl
 
         self.nx = self.amodel.x.size()[0]
@@ -383,13 +425,31 @@ class QuadrotorModel(AdamModel):
         #TODO: Noise dynamics and inverse dyn
 
         # Limits, define those parameters
-        self.x_min = np.array(params.lower_limits)
-        self.x_max = np.array(params.upper_limits)
+        self.x_min = - 1e6 * np.ones(self.nx)
+        self.x_max = 1e6 * np.ones(self.nx)
+        self.bounds_diff = np.abs(self.x_max-self.x_min)
 
-        self.u_min = -np.array(params.thrust_limits)
-        self.u_max =  np.array(params.thrust_limits)
+        self.u_min = np.zeros(self.nu)
+        self.u_max = np.array(params.thrust_limits)
 
-        # TODO: Cartesian obstacles
+        # EE ref (position of the drone itself)
+        self.t_glob = self.x[:3]
+        self.ee_ref = self.params.ee_ref
+
+        # Cartesian constraints
+        self.obs_string = self.params.obs_string
+        n_cap=0
+
+        for sphere in self.params.spheres_robot:
+            # The EE is the drone itself
+            T_sphere = MX.eye(4)
+            T_sphere[:3, 3] = self.x[:3]        # Drone position
+            sphere['fk'] = T_sphere[:3,3] +T_sphere[:3, :3]@ sphere['spatial_offset']      
+            sphere['fk_fun'] = Function(f'sphere_fk_{n_cap}', [self.x], [sphere['fk']])
+            sphere['index']=n_cap
+            n_cap +=1
+
+        self.NL_external = self.generate_NLconstraints_list()
 
         # Integrator
         sim = AcadosSim()
@@ -401,13 +461,16 @@ class QuadrotorModel(AdamModel):
     def checkStateConstraints(self, x):
         return np.all(np.logical_and(x >= self.x_min - self.params.tol_x, 
                                      x <= self.x_max + self.params.tol_x))
-    def checkTorqueConstraints(self, x, u):
-        return np.all(np.logical_and(u >= self.u_min - self.params.tol_u, 
-                                     u <= self.u_max + self.params.tol_u))
+    def checkInputConstraints(self, x, u):
+        return np.all(np.logical_and(u >= self.u_min - self.params.tol_tau, 
+                                     u <= self.u_max + self.params.tol_tau))
     
     def checkTorqueBounds(self, tau):
         raise NotImplementedError
     
+    def checkRunningConstraints(self, x, u):
+        return self.checkStateConstraints(x) and self.checkInputConstraints(x,u)
+
     def integrate(self, x, u):
         self.acados_integrator.set('x', x)
         self.acados_integrator.set('u', u)
@@ -416,7 +479,44 @@ class QuadrotorModel(AdamModel):
     
     def integrate_controller_model(self, x, u):
         x_next, _ = self.integrate(x, u)
-        return x_next
+        return x_next, u
     
     def integrate_naively(self, x, u):
         return self.integrate(x, u)
+    
+    def generate_NLconstraints_list(self):
+        """
+        Generate list of nonlinear constraints with bounds, for nodes 0, 1 - N-1, and N, as well as the list of casadi function of the collision constraints
+        """
+        constraint_list_0 = []
+        constraint_list_1_N_minus_1 = []
+        constraint_list_N = []
+
+        # generate also list of collision function for collision checks
+        self.collisions_constr_fun = []
+
+        # collisions
+        for i,pair in enumerate(self.params.collisions_pairs):        
+            if pair['type'] == 'sphere-sphere':
+                #constr_expr = sphere_sphere_dist(pair['elements'][1],pair['elements'][0]['fk'])
+                constr_expr = (self.t_glob - pair['elements'][1]['position']).T @ (self.t_glob - pair['elements'][1]['position'])
+                constraint_list_0.append([constr_expr, (pair['elements'][0]['radius']+pair['elements'][1]['radius'] + self.params.collision_margin*2)**2,1e6])
+                self.collisions_constr_fun.append([cs.Function(f"collision_constraint_{i}_{pair['elements'][0]['name']}_{pair['elements'][1]['name']}",[self.x],[constraint_list_0[-1][0]]), \
+                                        (pair['elements'][0]['radius']+pair['elements'][1]['radius'])**2-self.params.tol_obs,1e6+self.params.tol_obs])
+                # constraint_list_0[-1][1] += self.params.collision_margin**2
+                constraint_list_1_N_minus_1.append(constraint_list_0[-1])
+                constraint_list_N.append(constraint_list_0[-1])
+
+            if pair['type'] == 'sphere-plane':
+                constr_expr = plane_sphere_dist(pair['elements'][1],pair['elements'][0]['fk'])
+                constraint_list_0.append([constr_expr,pair['elements'][1]['bounds'][0] + pair['elements'][0]['radius']+self.params.collision_margin*2,pair['elements'][1]['bounds'][1] - pair['elements'][0]['radius']-self.params.collision_margin*2])
+                self.collisions_constr_fun.append([cs.Function(f"collision_constraint_{i}_{pair['elements'][0]['name']}_{pair['elements'][1]['name']}",[self.x],[constraint_list_0[-1][0]]), \
+                                        pair['elements'][1]['bounds'][0] + pair['elements'][0]['radius']-self.params.tol_obs,pair['elements'][1]['bounds'][1] - pair['elements'][0]['radius']+self.params.tol_obs])
+                # constraint_list_0[-1][1] += self.params.collision_margin
+                # constraint_list_0[-1][2] -= self.params.collision_margin
+                constraint_list_1_N_minus_1.append(constraint_list_0[-1])
+                constraint_list_N.append(constraint_list_0[-1])
+
+       
+        return constraint_list_0,constraint_list_1_N_minus_1,constraint_list_N
+    

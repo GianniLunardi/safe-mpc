@@ -75,12 +75,25 @@ class Parameters:
         self.NN_DIR = os.path.join(self.ROOT_DIR, 'nn_models/' + urdf_name + '/')
         self.ROBOTS_DIR = os.path.join(self.ROOT_DIR, 'robots/')
 
-        self.robot_urdf = f'{self.ROBOTS_DIR}/{urdf_name}_description/urdf/{urdf_name}.urdf'
+        # Skip urdf for drone
+        if urdf_name != "quadcopter":
+            self.robot_urdf = f'{self.ROBOTS_DIR}/{urdf_name}_description/urdf/{urdf_name}.urdf'
 
-        self.robot_descr = URDF.from_xml_file(self.robot_urdf)
-        self.links = [self.robot_descr.links[i].name for i in range(len(self.robot_descr.links))]
-        self.joints = [self.robot_descr.joints[i] for i in range(len(self.robot_descr.joints))]
-        
+            self.robot_descr = URDF.from_xml_file(self.robot_urdf)
+            self.links = [self.robot_descr.links[i].name for i in range(len(self.robot_descr.links))]
+            self.joints = [self.robot_descr.joints[i] for i in range(len(self.robot_descr.joints))]
+        else:
+            # params for quadcopter
+            self.mass = float(parameters['mass'])
+            self.arm_length = float(parameters['arm_length'])
+            self.Ct = float(parameters['Ct'])
+            self.Cd = float(parameters['Cd'])
+            self.J = np.array(parameters['J'])
+
+            self.upper_limits = np.array(parameters['upper_limits'])
+            self.lower_limits = -np.array(parameters['upper_limits'])
+            self.thrust_limits = np.array(parameters['thrust_limits'])
+
         self.test_num = int(parameters['test_num'])
         self.n_steps = int(parameters['n_steps'])
         self.cpu_num = int(parameters['cpu_num'])
@@ -131,8 +144,15 @@ class Parameters:
         self.tol_obs = float(parameters['tol_obs'])
         self.tol_safe_set = float(parameters['tol_safe_set'])
 
-        self.Q_weight = float(parameters['Q_weight'])
-        self.R_weight = float(parameters['R_weight'])         # eye(nu) * R
+        if urdf_name != "quadcopter":
+            self.Q_weight = float(parameters['Q_weight'])
+            self.R_weight = float(parameters['R_weight'])         # eye(nu) * R
+            self.Qn_weight = float(parameters['Qn_weight'])
+        else:
+            self.Q_weight = np.array(parameters['Q_weight'])
+            self.R_weight = np.array(parameters['R_weight'])         # eye(nu) * R
+            self.Qn_weight = np.array(parameters['Qn_weight'])
+
         self.eps = float(parameters['eps'])
         self.tol_conv = float(parameters['tol_conv'])
         self.tol_cost = float(parameters['tol_cost'])
